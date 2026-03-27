@@ -162,7 +162,8 @@ if service_tiers:
     filtered_df = filtered_df[filtered_df['service_model_tier'].isin(service_tiers)]
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "⭐ Key Account Summary",
     "🎯 Executive Summary",
     "📈 Performance Analysis",
     "⚠️ Problem Areas",
@@ -171,6 +172,159 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 with tab1:
+    st.header("⭐ Key Account Summary")
+    st.markdown("**Must Win | T200 | Tier 1 Accounts** - Strategic Priority Focus")
+
+    # Filter for key accounts
+    key_tiers = ['must win', '1_t200', '2_tier1']
+    key_accounts = filtered_df[filtered_df['service_model_tier'].isin(key_tiers)].copy()
+
+    if len(key_accounts) == 0:
+        st.warning("No key accounts found in current filter selection. Adjust sidebar filters to include Must Win, T200, or Tier 1 accounts.")
+    else:
+        # Key metrics row
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric("Key Accounts", f"{len(key_accounts):,}")
+
+        with col2:
+            key_spend = key_accounts['last_90d_spend'].sum()
+            total_spend = filtered_df['last_90d_spend'].sum()
+            key_pct = (key_spend / total_spend * 100) if total_spend > 0 else 0
+            st.metric("90d Spend", f"${key_spend/1_000_000:.1f}M", delta=f"{key_pct:.0f}% of portfolio")
+
+        with col3:
+            key_critical = len(key_accounts[key_accounts['web_eqs_status'] == 'NEEDS IMPROVEMENT'])
+            st.metric("Critical Issues", key_critical, delta_color="inverse")
+
+        with col4:
+            key_measured = len(key_accounts) - len(key_accounts[key_accounts['web_eqs_status'].isin(['N/A', '#N/A']) | key_accounts['web_eqs_status'].isna()])
+            key_healthy = len(key_accounts[key_accounts['web_eqs_status'].isin(['GOOD', 'EXCELLENT'])])
+            key_health = (key_healthy / key_measured * 100) if key_measured > 0 else 0
+            st.metric("Health Score", f"{key_health:.0f}%")
+
+        st.divider()
+
+        # Breakdown by tier
+        st.subheader("📊 Breakdown by Service Tier")
+
+        tier_summary = []
+        for tier in key_tiers:
+            tier_df = key_accounts[key_accounts['service_model_tier'] == tier]
+            if len(tier_df) > 0:
+                tier_summary.append({
+                    'Tier': tier.replace('_', ' ').title(),
+                    'Accounts': len(tier_df),
+                    'Critical': len(tier_df[tier_df['web_eqs_status'] == 'NEEDS IMPROVEMENT']),
+                    'Good/Excellent': len(tier_df[tier_df['web_eqs_status'].isin(['GOOD', 'EXCELLENT'])]),
+                    'Grey Area (N/A)': len(tier_df[tier_df['web_eqs_status'].isin(['N/A', '#N/A']) | tier_df['web_eqs_status'].isna()]),
+                    '90d Spend': tier_df['last_90d_spend'].sum()
+                })
+
+        df_tier_summary = pd.DataFrame(tier_summary)
+        df_tier_summary['90d Spend'] = df_tier_summary['90d Spend'].apply(lambda x: f"${x/1_000_000:.1f}M")
+
+        st.dataframe(df_tier_summary, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # EQS Status Distribution for Key Accounts
+        st.subheader("🎯 EQS Status Distribution")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Web EQS Status**")
+            key_web_status = key_accounts['web_eqs_status'].value_counts()
+
+            fig = px.pie(
+                values=key_web_status.values,
+                names=key_web_status.index,
+                color=key_web_status.index,
+                color_discrete_map={
+                    'NEEDS IMPROVEMENT': '#ef4444',
+                    'FAIR': '#f59e0b',
+                    'GOOD': '#10b981',
+                    'EXCELLENT': '#059669',
+                    'N/A': '#9ca3af'
+                }
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            st.markdown("**App EQS Status**")
+            key_app_status = key_accounts['app_eqs_status'].value_counts()
+
+            fig = px.pie(
+                values=key_app_status.values,
+                names=key_app_status.index,
+                color=key_app_status.index,
+                color_discrete_map={
+                    'NEEDS IMPROVEMENT': '#ef4444',
+                    'FAIR': '#f59e0b',
+                    'GOOD': '#10b981',
+                    'EXCELLENT': '#059669',
+                    'N/A': '#9ca3af'
+                }
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+
+        # Critical Key Accounts
+        st.subheader("🚨 Key Accounts Needing Immediate Attention")
+
+        key_critical_accounts = key_accounts[key_accounts['web_eqs_status'] == 'NEEDS IMPROVEMENT'].copy()
+        key_critical_accounts = key_critical_accounts.sort_values('last_90d_spend', ascending=False)
+
+        if len(key_critical_accounts) > 0:
+            st.markdown(f"**{len(key_critical_accounts)} key accounts require immediate action:**")
+
+            critical_display = key_critical_accounts[[
+                'ultimate_parent_name', 'advertiser_account_name', 'service_model_tier',
+                'pod', 'pod_channel', 'web_eqs_score', 'web blocker', 'web resolution timing',
+                'last_90d_spend'
+            ]].copy()
+
+            critical_display['last_90d_spend'] = critical_display['last_90d_spend'].apply(
+                lambda x: f"${x/1_000_000:.2f}M" if pd.notna(x) and x > 0 else '-'
+            )
+            critical_display['service_model_tier'] = critical_display['service_model_tier'].str.replace('_', ' ').str.title()
+
+            critical_display.columns = ['Parent', 'Account', 'Tier', 'Pod', 'Channel',
+                                       'EQS Score', 'Blocker', 'Resolution', '90d Spend']
+
+            st.dataframe(critical_display, use_container_width=True, hide_index=True)
+
+            # Impact
+            critical_spend = key_critical_accounts['last_90d_spend'].sum()
+            st.error(f"💰 **${critical_spend/1_000_000:.1f}M in spend** from key accounts at risk")
+        else:
+            st.success("✅ All key accounts have healthy EQS status!")
+
+        st.divider()
+
+        # Top Key Accounts by Spend
+        st.subheader("💎 Top Key Accounts by Spend")
+
+        top_key = key_accounts.sort_values('last_90d_spend', ascending=False).head(15)
+
+        top_display = top_key[[
+            'ultimate_parent_name', 'advertiser_account_name', 'service_model_tier',
+            'web_eqs_status', 'app_eqs_status', 'primary_msot', 'last_90d_spend'
+        ]].copy()
+
+        top_display['last_90d_spend'] = top_display['last_90d_spend'].apply(
+            lambda x: f"${x/1_000_000:.2f}M" if pd.notna(x) and x > 0 else '-'
+        )
+        top_display['service_model_tier'] = top_display['service_model_tier'].str.replace('_', ' ').str.title()
+
+        top_display.columns = ['Parent', 'Account', 'Tier', 'Web EQS', 'App EQS', 'MSOT', '90d Spend']
+
+        st.dataframe(top_display, use_container_width=True, hide_index=True)
+
+with tab2:
     st.header("Executive Summary")
 
     # Key metrics
@@ -280,7 +434,7 @@ with tab1:
         st.markdown("**Action:** Assess measurement capability and establish baselines")
         st.markdown('</div>', unsafe_allow_html=True)
 
-with tab2:
+with tab3:
     st.header("Performance Analysis by Segment")
 
     # Performance by pod
@@ -371,7 +525,7 @@ with tab2:
 
     st.dataframe(df_channel_display, use_container_width=True, hide_index=True)
 
-with tab3:
+with tab4:
     st.header("⚠️ Problem Areas & Opportunities")
 
     # Critical accounts
@@ -443,7 +597,7 @@ with tab3:
     else:
         st.success("✅ All accounts have defined EQS status!")
 
-with tab4:
+with tab5:
     st.header("🔍 Common Challenges & Blockers")
 
     # Blocker analysis
@@ -523,7 +677,7 @@ with tab4:
 
         st.plotly_chart(fig, use_container_width=True)
 
-with tab5:
+with tab6:
     st.header("📊 Detailed Drilldown")
 
     # Search and filter
