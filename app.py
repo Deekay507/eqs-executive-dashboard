@@ -16,8 +16,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import numpy as np
 
 # Page config
 st.set_page_config(
@@ -86,7 +84,7 @@ st.markdown("""
 @st.cache_data
 def load_eqs_data():
     """Load EQS tracker data"""
-    file_path = '/Users/kchodavarapu/Global MSol EQS target list 2026 - [use this] EQS status - GCS Tier 1+2 Advertisers.csv'
+    file_path = 'Global MSol EQS target list 2026 - [use this] EQS status - GCS Tier 1+2 Advertisers.csv'
     df = pd.read_csv(file_path)
 
     # Clean column names
